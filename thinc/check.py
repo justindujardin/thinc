@@ -59,7 +59,7 @@ def has_shape(shape):
                 dim = getattr(self, dim, None)
             shape_values.append(dim)
         if len(shape) != len(arg.shape):
-            raise ShapeMismatchError(arg.shape, tuple(shape_values), shape)
+            raise ShapeMismatchError(arg.shape, tuple(shape_values), shape, self)
         for i, dim in enumerate(shape_values):
             # Allow underspecified dimensions
             if dim != None and arg.shape[i] != dim:

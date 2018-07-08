@@ -82,8 +82,11 @@ def test_check_has_shape_passes():
 
 @pytest.mark.parametrize('arg', [True, None, 14])
 def test_check_has_shape_fails(arg):
-    with pytest.raises(ExpectedTypeError):
+    with pytest.raises(ExpectedTypeError) as e:
         check.has_shape([])(0, [arg], None)
+
+    # should include the layer name associated with the failuse
+    assert e is not None
 
 
 @pytest.mark.parametrize('shape', [[1, 2], [3], [4, 'hello']])

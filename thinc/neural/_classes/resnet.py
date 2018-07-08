@@ -4,6 +4,7 @@ from .affine import Affine
 
 
 class Residual(Model):
+    name = "Residual"
     def __init__(self, layer):
         Model.__init__(self)
         self._layers.append(layer)

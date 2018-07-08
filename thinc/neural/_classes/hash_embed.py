@@ -30,12 +30,14 @@ def _uniform_init(lo, hi):
 )
 class HashEmbed(Model):
     name = 'hash-embed'
-    def __init__(self, nO, nV, seed=None, **kwargs):
+    def __init__(self, nO, nV, seed=None, name=None, **kwargs):
         Model.__init__(self, **kwargs)
         self.column = kwargs.get('column', 0)
         self.nO = nO
         self.nV = nV
         self.seed = self.id
+        if name is not None:
+            self.name = "{}-{}".format(self.name, name)
 
     def predict(self, ids):
         if ids.ndim >= 2:

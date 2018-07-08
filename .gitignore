@@ -33,3 +33,5 @@ tmp/
 *.pickle
 *.dat
 .eggs/
+.pytest_cache
+build/

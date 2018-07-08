@@ -5,7 +5,6 @@ from collections import Sized
 import traceback
 from termcolor import colored as color
 
-
 class UndefinedOperatorError(TypeError):
     def __init__(self, op, arg1, arg2, operators):
         self.tb = traceback.extract_stack()
@@ -38,12 +37,13 @@ class DifferentLengthError(ValueError):
 
 
 class ShapeMismatchError(ValueError):
-    def __init__(self, shape, dim, shape_names):
+    def __init__(self, shape, dim, shape_names, layer_name=''):
         self.tb = traceback.extract_stack()
         shape = _repr(shape)
         dim = _repr(dim)
+        layer = _format_layer_name(layer_name)
         ValueError.__init__(self, get_error(
-            "Shape mismatch: input {s} not compatible with {d}.".format(s=shape, d=dim),
+            "{l}Shape mismatch: input {s} not compatible with {d}.".format(s=shape, d=dim, l=layer),
             tb=self.tb
         ))
 
@@ -59,12 +59,13 @@ class TooFewDimensionsError(ValueError):
 
 class ExpectedTypeError(TypeError):
     max_to_print_of_value = 200
-    def __init__(self, bad_type, expected):
+    def __init__(self, bad_type, expected, layer_name=''):
+        layer = _format_layer_name(layer_name)
         if isinstance(expected, str):
             expected = [expected]
         self.tb = traceback.extract_stack()
         TypeError.__init__(self, get_error(
-            "Expected type {e}, but got: {v} ({t})".format(e='/'.join(expected), v=_repr(bad_type), t=type(bad_type)),
+            "{l}Expected type {e}, but got: {v} ({t})".format(l=layer, e='/'.join(expected), v=_repr(bad_type), t=type(bad_type)),
             tb=self.tb,
             highlight=_repr(bad_type)
         ))
@@ -113,3 +114,7 @@ def _format_user_error(text, i, highlight):
     if highlight:
         text = text.replace(str(highlight), color(str(highlight), 'yellow'))
     return template.format(sp=spacing, t=text)
+
+
+def _format_layer_name(layer_name=''):
+    return 'Layer({}): \n\t'.format(layer_name) if layer_name != '' else layer_name

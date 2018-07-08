@@ -86,7 +86,7 @@ def FeatureExtracter(lang, attrs=[LOWER, SHAPE, PREFIX, SUFFIX], tokenized=True)
         def backward(d_features, sgd=None):
             return d_features
         return features, backward
-    return layerize(forward)
+    return layerize(forward, name="FeatureExtracter")
 
 
 def Residual(layer):

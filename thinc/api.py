@@ -11,7 +11,7 @@ class FunctionLayer(Model):
     '''Wrap functions into weightless Model instances, for use as network
     components.'''
     def __init__(self, begin_update, predict=None, predict_one=None,
-            nI=None, nO=None, *args, **kwargs):
+            nI=None, nO=None, name=None, *args, **kwargs):
         self.begin_update = begin_update
         if predict is not None:
             self.predict = predict
@@ -20,6 +20,7 @@ class FunctionLayer(Model):
         self.nI = nI
         self.nO = nO
         Model.__init__(self)
+        self.name = name if name is not None else begin_update.__name__
 
 
 def _run_child_hooks(model, X, y):
@@ -68,12 +69,14 @@ class FeedForward(Model):
             return gradient
         return X, continue_update
 
-def layerize(begin_update=None, predict=None, *args, **kwargs):
+def layerize(begin_update=None, predict=None, name=None, *args, **kwargs):
     '''Wrap a function into a layer'''
+    if name is None:
+        name = begin_update.__name__
     if begin_update is not None:
-        return FunctionLayer(begin_update, predict=predict, *args, **kwargs)
+        return FunctionLayer(begin_update, name=name, predict=predict, *args, **kwargs)
     def wrapper(begin_update):
-        return FunctionLayer(begin_update, *args, **kwargs)
+        return FunctionLayer(begin_update, name=name, *args, **kwargs)
     return wrapper
 
 
@@ -110,7 +113,7 @@ def remap_ids(ops=None, column=0):
                 n_vector += 1
             ids[i] = id_map[id_]
         return ops.asarray(ids), None
-    model = layerize(remap_ids_fwd)
+    model = layerize(remap_ids_fwd, name=remap_ids.__name__)
     if ops is None:
         ops = model.ops
     return model
@@ -120,7 +123,7 @@ def with_getitem(idx, layer):
     def begin_update(items, drop=0.):
         X, finish = layer.begin_update(items[idx], drop=drop)
         return items[:idx] + (X,) + items[idx+1:], finish
-    model = layerize(begin_update)
+    model = layerize(begin_update, name=with_getitem.__name__)
     model._layers.append(layer)
     def on_data(self, items, y):
         for hook in layer.on_data_hooks:
@@ -156,12 +159,12 @@ def clone(orig, n):
     i.e. `clone(f, 3)(x)` computes `f(f'(f''(x)))`.
     '''
     if n == 0:
-        return layerize(noop())
+        return layerize(noop(), name=clone.__name__)
     layers = [orig]
-    for i in range(n-1):
+    for _ in range(n-1):
         layers.append(copy.deepcopy(orig))
         layers[-1].set_id()
-    return FeedForward(layers)
+    return FeedForward(layers, name=clone.__name__)
 
 
 def concatenate(*layers): # pragma: no cover
@@ -197,7 +200,7 @@ def concatenate(*layers): # pragma: no cover
             else:
                 return None
         return output, finish_update
-    layer = FunctionLayer(begin_update)
+    layer = FunctionLayer(begin_update, name=concatenate.__name__)
     layer._layers = list(layers)
     def on_data(self, X, y=None):
         for layer in self._layers:
@@ -228,7 +231,7 @@ def add(*layers):
             else:
                 return None
         return out, backward
-    model = layerize(forward)
+    model = layerize(forward, name=add.__name__)
     model._layers = list(layers)
     def on_data(self, X, y):
         for layer in layers:
@@ -283,7 +286,7 @@ def with_square_sequences(model):
             d_padded_in = backprop_model((d_padded_out, None), sgd=sgd)
             return unpad(d_padded_in)
         return seqs_out, backprop_padding
-    return wrap(padded_forward, model)
+    return wrap(padded_forward, model, name=with_square_sequences.__name__)
 
 
 def with_flatten(layer, pad=0, ndim=4):
@@ -306,10 +309,9 @@ def with_flatten(layer, pad=0, ndim=4):
         X = layer(layer.ops.flatten(seqs_in, pad=pad))
         return layer.ops.unflatten(X, lengths, pad=pad)
 
-    model = layerize(begin_update, predict=predict)
+    model = layerize(begin_update, predict=predict, name=with_flatten.__name__)
     model._layers.append(layer)
     model.on_data_hooks.append(_with_flatten_on_data)
-    model.name = 'flatten'
     return model
 
 def _with_flatten_on_data(model, X, y):
@@ -321,7 +323,7 @@ def _with_flatten_on_data(model, X, y):
 
 
 def get_word_ids(ops, pad=1, token_drop=0., ignore=None):
-    # TODO: Is this made obsolete by the FeatureExtractor?
+    # TODO: Is this made obsolete by the FeatureExtracter?
     def forward(docs, drop=0.):
         '''Get word forms.'''
         seqs = []
@@ -334,12 +336,14 @@ def get_word_ids(ops, pad=1, token_drop=0., ignore=None):
             #seq += [0] * pad
             seqs.append(ops.asarray(seq, dtype='uint64'))
         return seqs, None
-    return layerize(forward)
+    return layerize(forward, name=get_word_ids.__name__)
 
 
 class FeatureExtracter(Model):
+    name = "FeatureExtracter"
     def __init__(self, attrs):
         Model.__init__(self)
+        self.name = "FeatureExtracter"
         self.attrs = attrs
     
     def begin_update(self, docs, drop=0.):
@@ -357,8 +361,8 @@ class FeatureExtracter(Model):
         return self.ops.asarray(arr, dtype='uint64')
 
 
-def wrap(func, *child_layers):
-    model = layerize(func)
+def wrap(func, *child_layers, name=None):
+    model = layerize(func, name=name)
     model._layers.extend(child_layers)
     def on_data(self, X, y):
         for child in self._layers:
@@ -399,7 +403,7 @@ def uniqued(layer, column=0):
             else:
                 return None
         return Y, uniqued_bwd
-    model = wrap(uniqued_fwd, layer)
+    model = wrap(uniqued_fwd, layer, name=uniqued.__name__)
     return model
 
 
@@ -428,7 +432,7 @@ def foreach(layer, drop_factor=1.0):
             else:
                 return layer.ops.unflatten(d_sents, lengths)
         return output, foreach_bwd
-    model = wrap(foreach_fwd, layer)
+    model = wrap(foreach_fwd, layer, name=foreach.__name__)
 
     def _run_foreach_child_hooks(model, X, y):
         for layer in model._layers:
@@ -464,5 +468,5 @@ def foreach_sentence(layer, drop_factor=1.0):
             else:
                 return layer.ops.unflatten(d_sents, lengths)
         return output, sentence_bwd
-    model = wrap(sentence_fwd, layer)
+    model = wrap(sentence_fwd, layer, name=foreach_sentence.__name__)
     return model
