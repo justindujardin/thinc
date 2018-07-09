@@ -71,7 +71,7 @@ class FeedForward(Model):
 
 def layerize(begin_update=None, predict=None, name=None, *args, **kwargs):
     '''Wrap a function into a layer'''
-    if name is None:
+    if name is None and begin_update is not None:
         name = begin_update.__name__
     if begin_update is not None:
         return FunctionLayer(begin_update, name=name, predict=predict, *args, **kwargs)
