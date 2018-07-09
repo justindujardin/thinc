@@ -8,6 +8,11 @@ from .exceptions import UndefinedOperatorError, DifferentLengthError
 from .exceptions import ExpectedTypeError, ShapeMismatchError
 from .exceptions import OutsideRangeError
 
+def self_name(args):
+    """Render a human readable name for the caller associated with check errors"""
+    self = args[0]
+    return getattr(self, 'name', '{}'.format(self))
+
 def is_docs(arg_id, args, kwargs):
     from spacy.tokens.doc import Doc
     docs = args[arg_id]
@@ -52,7 +57,7 @@ def has_shape(shape):
         self = args[0]
         arg = args[arg_id]
         if not hasattr(arg, 'shape'):
-            raise ExpectedTypeError(arg, ['array'])
+            raise ExpectedTypeError(arg, ['array'], self_name(args))
         shape_values = []
         for dim in shape:
             if not isinstance(dim, integer_types):
@@ -63,29 +68,30 @@ def has_shape(shape):
         for i, dim in enumerate(shape_values):
             # Allow underspecified dimensions
             if dim != None and arg.shape[i] != dim:
-                raise ShapeMismatchError(arg.shape, shape_values, shape)
+                raise ShapeMismatchError(arg.shape, shape_values, shape, self_name(args))
     return has_shape_inner
 
-
 def is_shape(arg_id, args, func_kwargs, **kwargs):
+    self = args[0]
+    name = self_name(args)
     arg = args[arg_id]
     if not isinstance(arg, Iterable):
-        raise ExpectedTypeError(arg, ['iterable'])
+        raise ExpectedTypeError(arg, ['iterable'], name)
     for value in arg:
         if not isinstance(value, integer_types) or value < 0:
-            raise ExpectedTypeError(arg, ['valid shape (positive ints)'])
+            raise ExpectedTypeError(arg, ['valid shape (positive ints)'], name)
 
 
 def is_sequence(arg_id, args, kwargs):
     arg = args[arg_id]
     if not isinstance(arg, Iterable) and not hasattr(arg, '__getitem__'):
-        raise ExpectedTypeError(arg, ['iterable'])
+        raise ExpectedTypeError(arg, ['iterable'], self_name(args))
 
 
 def is_float(arg_id, args, func_kwargs, **kwargs):
     arg = args[arg_id]
     if not isinstance(arg, float):
-        raise ExpectedTypeError(arg, ['float'])
+        raise ExpectedTypeError(arg, ['float'], self_name(args))
     if 'min' in kwargs and arg < kwargs['min']:
         raise OutsideRangeError(arg, kwargs['min'], '>=')
     if 'max' in kwargs and arg > kwargs['max']:
