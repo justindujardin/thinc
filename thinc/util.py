@@ -291,7 +291,9 @@ def xp2torch(
         torch_tensor = torch.utils.dlpack.from_dlpack(dlpack_tensor)
     else:
         torch_tensor = torch.from_numpy(xp_tensor)
-    if requires_grad:
+    # Only float tensors can be backpropped and Torch throws an error
+    # More: https://github.com/pytorch/pytorch/pull/7034
+    if requires_grad and torch_tensor.dtype.is_floating_point:
         torch_tensor.requires_grad_()
     return torch_tensor
 
