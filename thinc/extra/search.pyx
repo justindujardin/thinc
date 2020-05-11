@@ -1,9 +1,4 @@
-# cython: profile=True
-# cython: experimental_cpp_class_def=True
-# cython: cdivision=True
-# cython: infer_types=True
-
-from __future__ cimport division
+# cython: profile=True, experimental_cpp_class_def=True, cdivision=True, infer_types=True
 cimport cython
 from libc.string cimport memset, memcpy
 from libc.math cimport log, exp
@@ -11,7 +6,6 @@ import math
 
 from cymem.cymem cimport Pool
 from preshed.maps cimport PreshMap
-from ..typedefs cimport hash_t
 
 
 cdef class Beam:
@@ -56,10 +50,14 @@ cdef class Beam:
     property probs:
         def __get__(self):
             return _softmax([self._states[i].score for i in range(self.size)])
-    
+
     property scores:
         def __get__(self):
             return [self._states[i].score for i in range(self.size)]
+
+    property histories:
+        def __get__(self):
+            return self.histories
 
     cdef int set_row(self, int i, const weight_t* scores, const int* is_valid,
                      const weight_t* costs) except -1:
@@ -76,10 +74,16 @@ cdef class Beam:
             memcpy(self.is_valid[i], is_valid[i], sizeof(bint) * self.nr_class)
             memcpy(self.costs[i], costs[i], sizeof(int) * self.nr_class)
 
-    cdef int initialize(self, init_func_t init_func, int n, void* extra_args) except -1:
+    cdef int initialize(self, init_func_t init_func, del_func_t del_func, int n, void* extra_args) except -1:
         for i in range(self.width):
             self._states[i].content = init_func(self.mem, n, extra_args)
             self._parents[i].content = init_func(self.mem, n, extra_args)
+        self.del_func = del_func
+
+    def __del__(self):
+        for i in range(self.width):
+            self.del_func(self.mem, self._states[i].content, NULL)
+            self.del_func(self.mem, self._parents[i].content, NULL)
 
     @cython.cdivision(True)
     cdef int advance(self, trans_func_t transition_func, hash_func_t hash_func,
@@ -171,6 +175,7 @@ cdef class Beam:
         cdef _State* s
         cdef int i, j, move_id
         assert self.size >= 1
+        cdef vector[Entry] entries
         for i in range(self.size):
             s = &self._states[i]
             move_id = i * self.nr_class
@@ -181,19 +186,31 @@ cdef class Beam:
                 else:
                     entry.first = s.score
                 entry.second = move_id
-                if q.empty() \
-                or q.top().first < 0 \
-                or entry.first >= (q.top().first * self.min_density):
-                    q.push(entry)
+                entries.push_back(entry)
             else:
                 for j in range(self.nr_class):
                     if is_valid[i][j]:
                         entry.first = s.score + scores[i][j]
                         entry.second = move_id + j
-                        if q.empty() \
-                        or q.top().first < 0 \
-                        or entry.first >= (q.top().first * self.min_density):
-                            q.push(entry)
+                        entries.push_back(entry)
+        cdef double max_ = entries[0].first
+        cdef double Z = 0.
+        cdef double cutoff = 0.0
+        if self.min_density == 0.0:
+            for i in range(entries.size()):
+                q.push(entries[i])
+        else:
+            # Softmax into probabilities, so we can prune
+            for i in range(entries.size()):
+                if entries[i].first > max_:
+                    max_ = entries[i].first
+            for i in range(entries.size()):
+                Z += exp(entries[i].first-max_)
+            cutoff = (1. / Z) * self.min_density
+            for i in range(entries.size()):
+                prob = exp(entries[i].first-max_) / Z
+                if prob >= cutoff:
+                    q.push(entries[i])
 
 
 cdef class MaxViolation:
