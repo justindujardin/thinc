@@ -6,6 +6,7 @@ from ..model import Model
 from ..shims import TensorFlowShim, keras_model_fns, maybe_handshake_model
 from ..util import xp2tensorflow, tensorflow2xp, assert_tensorflow_installed
 from ..util import is_tensorflow_array, convert_recursive, is_xp_array
+from ..backends import get_current_ops, Ops
 from ..types import ArrayXd, ArgsKwargs
 
 try:
@@ -141,27 +142,30 @@ def forward(model: Model[InT, OutT], X: InT, is_train: bool) -> Tuple[OutT, Call
 
 def _convert_inputs(model, X, is_train):
     def xp2tensorflow_(x):
-        print(type(x))
-        print(x.shape)
         return xp2tensorflow(x, requires_grad=is_train)
+
+    def tensorflow2xp_(x):
+        ops: Ops = get_current_ops()
+        return ops.asarray(xp2tensorflow(x, requires_grad=is_train))
+
     converted = convert_recursive(is_xp_array, xp2tensorflow_, X)
     if isinstance(converted, ArgsKwargs):
 
         def reverse_conversion(dXtf):
-            return convert_recursive(is_tensorflow_array, tensorflow2xp, dXtf)
+            return convert_recursive(is_tensorflow_array, tensorflow2xp_, dXtf)
 
         return converted, reverse_conversion
     elif isinstance(converted, dict):
 
         def reverse_conversion(dXtf):
-            dX = convert_recursive(is_tensorflow_array, tensorflow2xp, dXtf)
+            dX = convert_recursive(is_tensorflow_array, tensorflow2xp_, dXtf)
             return dX.kwargs
 
         return ArgsKwargs(args=tuple(), kwargs=converted), reverse_conversion
     elif isinstance(converted, (tuple, list)):
 
         def reverse_conversion(dXtf):
-            dX = convert_recursive(is_tensorflow_array, tensorflow2xp, dXtf)
+            dX = convert_recursive(is_tensorflow_array, tensorflow2xp_, dXtf)
             return dX.args
 
         return ArgsKwargs(args=tuple(converted), kwargs={}), reverse_conversion
@@ -175,7 +179,11 @@ def _convert_inputs(model, X, is_train):
 
 
 def _convert_outputs(model, Ytf, is_train):
-    Y = convert_recursive(is_tensorflow_array, tensorflow2xp, Ytf)
+    def tensorflow2xp_(x):
+        ops: Ops = get_current_ops()
+        return ops.asarray(xp2tensorflow(x, requires_grad=is_train))
+
+    Y = convert_recursive(is_tensorflow_array, tensorflow2xp_, Ytf)
 
     def reverse_conversion(dY):
         return convert_recursive(is_xp_array, xp2tensorflow, dY)
