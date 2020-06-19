@@ -140,7 +140,10 @@ def forward(model: Model[InT, OutT], X: InT, is_train: bool) -> Tuple[OutT, Call
 
 
 def _convert_inputs(model, X, is_train):
-    xp2tensorflow_ = lambda x: xp2tensorflow(x, requires_grad=is_train)
+    def xp2tensorflow_(x):
+        print(type(x))
+        print(x.shape)
+        return xp2tensorflow(x, requires_grad=is_train)
     converted = convert_recursive(is_xp_array, xp2tensorflow_, X)
     if isinstance(converted, ArgsKwargs):
 
@@ -161,7 +164,7 @@ def _convert_inputs(model, X, is_train):
             dX = convert_recursive(is_tensorflow_array, tensorflow2xp, dXtf)
             return dX.args
 
-        return ArgsKwargs(args=converted, kwargs={}), reverse_conversion
+        return ArgsKwargs(args=tuple(converted), kwargs={}), reverse_conversion
     else:
 
         def reverse_conversion(dXtf):
