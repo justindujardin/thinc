@@ -311,12 +311,9 @@ def xp2tensorflow(
 ) -> "tf.Tensor":  # pragma: no cover
     """Convert a numpy or cupy tensor to a TensorFlow Tensor or Variable"""
     assert_tensorflow_installed()
-    if cupy is None:
-        assert isinstance(xp_tensor, numpy.ndarray)
-    else:  # pragma: no cover
-        if isinstance(xp_tensor, cupy.core.core.ndarray):
-            xp_tensor = cupy.asnumpy(xp_tensor)
-        assert isinstance(xp_tensor, numpy.ndarray)
+    # TensorFlow can't convert cupy arrays to Tensors, so move to CPU first :/
+    if cupy is not None and isinstance(xp_tensor, cupy.core.core.ndarray):
+        xp_tensor = cupy.asnumpy(xp_tensor)
     tensorflow_tensor = tf.convert_to_tensor(xp_tensor)
     if as_variable:
         # tf.Variable() automatically puts in GPU if available.
